@@ -148,33 +148,13 @@ public class FutureTests {
     });
   }
 
-  /**
-   * We know now that onFailure is called with the throwable from a FailedFuture. Because of this, we can show
-   * that compose returns a failed future when called with only the success mapper. If a FailedFuture were not
-   * being returned from compose onFailure would not be executed here
-   */
 
+  /**
+   * There will be times when you will need to use multiple futures in a row. To do this, we utilize the compose method.
+   * Calling compose on a future will wait for the future it is called on to complete and then return another future.
+   */
   @Test
   public void composeExample1() {
-    Promise<String> promise1 = Promise.promise();
-    Future<String> future1 = promise1.future();
-
-    Promise<String> promise2 = Promise.promise();
-    Future<String> future2 = promise2.future();
-
-    future1.compose(result -> {
-      System.out.println("I will not be printed");
-      return future2;
-    }).onFailure(System.out::println);
-
-    promise1.fail("error");
-  }
-
-  /**
-   * Chained successful composes example
-   */
-  @Test
-  public void composeExample2() {
     Promise<String> promise1 = Promise.promise();
     Future<String> future1 = promise1.future();
 
@@ -188,7 +168,28 @@ public class FutureTests {
       return future2;
     });
 
-    promise1.complete("Sam");
+    promise1.complete("Completing promise1!");
+  }
+
+  /**
+   * We know now that onFailure is called with the throwable from a FailedFuture. Because of this, we can show
+   * that compose returns a failed future when called with only the success mapper. If a FailedFuture were not
+   * being returned from compose onFailure would not be executed here
+   */
+  @Test
+  public void composeExample2() {
+    Promise<String> promise1 = Promise.promise();
+    Future<String> future1 = promise1.future();
+
+    Promise<String> promise2 = Promise.promise();
+    Future<String> future2 = promise2.future();
+
+    future1.compose(result -> {
+      System.out.println("I will not be printed");
+      return future2;
+    }).onFailure(System.out::println);
+
+    promise1.fail("error");
   }
 
   /**
@@ -217,29 +218,38 @@ public class FutureTests {
   }
 
   /**
-   * The recover method is similar to how onFailure is to onComplete. Under the hood, it actually calls the
-   * compose method with (Future::succeededFuture, yourErrorMapper); Recall that compose has an overload that accepts
-   * arguments for both a success and failure mapper. This allows you to build logic for when a future it is called on
-   * fails while propagating the result to the next future if the future recover on succeeds
+   * The recover method is similar to how onFailure is to onComplete. Under the hood, it calls the compose method
+   * with (Future::succeededFuture, yourErrorMapper); Recall that compose has an overload that accepts
+   * arguments for both a success and failure mapper. This allows you to return a different future in the event that
+   * the future recover is called on fails
    */
   @Test
   public void recoverFuture() {
+    String future2CompletionValue = "Future 2 succeeded value";
+
     Promise<String> promise1 = Promise.promise();
     Future<String> future1 = promise1.future();
 
     Promise<String> promise2 = Promise.promise();
     Future<String> future2 = promise2.future();
-    future2.onSuccess(System.out::println);
 
-    future1.compose(result -> {
-      System.out.println(result);
-      promise2.complete(result);
-      return future2;
-    }, throwable -> {
-      System.out.println(throwable.getMessage());
-      return Future.failedFuture(throwable);
-    });
+    future2
+      .onSuccess(result -> {
+        System.out.println("In future2 onSuccess!");
+        assertEquals(future2CompletionValue, result);
+      })
+      .onFailure(t -> {
+        System.out.println("In future2 onFailure!");
+        fail();
+      });
 
-    promise1.complete("Sam");
+    future1
+      .recover(throwable -> {
+        System.out.println("Recovering from failed future1!");
+        return future2;
+      });
+
+    promise1.fail("Promise1 failed!");
+    promise2.complete(future2CompletionValue);
   }
 }
